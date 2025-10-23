@@ -99,3 +99,6 @@ fabric.properties
 
 # Go workspace file
 go.work
+
+# Custom project binaries
+ordersystem

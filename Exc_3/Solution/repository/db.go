@@ -77,13 +77,36 @@ func prepopulate(dbConn *gorm.DB) error {
 	}
 	if exists {
 		// don't prepopulate if has already run
+		slog.Info("Database already contains data, skipping prepopulation.")
 		return nil
 	}
-	// create drink menu
-	// todo create drinks
-	// todo create orders
-	// GORM documentation can be found here: https://gorm.io/docs/index.html
 
+	// i am now doing the "todo"s, so i replace the comments with code
+	slog.Info("Database is empty, prepopulating...")
+
+	// 1. Create drinks first (Hint 2.1)
+	drinks := []model.Drink{
+		{Name: "Coffee", Price: 2.50},
+		{Name: "Tea", Price: 2.00},
+		{Name: "Juice", Price: 3.00},
+	}
+	if err := dbConn.Create(&drinks).Error; err != nil {
+		return fmt.Errorf("failed to create drinks: %w", err)
+	}
+
+	// 2. Create orders using DrinkID (Hint 2.2)
+	slog.Info("Populating orders...")
+	// i use the IDs from the 'drinks' slice i just created
+	orders := []model.Order{
+		{DrinkID: drinks[0].ID, Amount: 2}, // 2 Coffees
+		{DrinkID: drinks[2].ID, Amount: 1}, // 1 Juice
+	}
+
+	if err := dbConn.Create(&orders).Error; err != nil {
+		return fmt.Errorf("failed to create orders: %w", err)
+	}
+
+	slog.Info("Database prepopulated successfully.")
 	return nil
 }
 
