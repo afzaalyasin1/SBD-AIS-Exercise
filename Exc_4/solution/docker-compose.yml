@@ -1,0 +1,53 @@
+#todo
+services:
+# PostgreSQL Database Service
+  db:
+    
+    image: postgres:latest
+    
+    container_name: postgres-EX4
+    
+    environment:
+      POSTGRES_DB: order
+      POSTGRES_USER: docker
+      POSTGRES_PASSWORD: docker
+    
+    
+    ports:
+      - "5433:5432"
+    networks:
+      - order-network    
+
+
+  
+  orderservice:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ordersystem      
+    
+
+    
+    ports:
+      - "3000:3000"
+    
+    environment:
+
+      DB_HOST: db
+      POSTGRES_TCP_PORT: 5432
+      POSTGRES_DB: order
+      POSTGRES_USER: docker
+      POSTGRES_PASSWORD: docker
+
+    command: sh -c "sleep 5 && ./ordersystem"
+    
+    networks:
+      - order-network
+    #start db before ordersystem
+    depends_on:
+      - db
+networks:
+  order-network:
+    
+    driver: bridge
+
