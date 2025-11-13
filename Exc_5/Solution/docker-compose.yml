@@ -1,0 +1,93 @@
+networks:
+  web:
+    name: web
+  intercom:
+    name: intercom
+
+volumes:
+  order_pg_vol:
+
+services:
+  traefik:
+    image: "traefik:v3.5.2"
+    # todo add traefik config
+    container_name: traefik
+    command:
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+    
+      - "--api.insecure=true"  # Enables the API on port 8080
+      - "--api.dashboard=true" # Tells Traefik to run the dashboard
+    ports:
+      - "80:80"
+      - "8080:8080"
+    volumes:
+    - "/var/run/docker.sock:/var/run/docker.sock"
+
+
+    # todo only expose network web
+    networks:  #already correct
+      - web
+
+
+  orderservice:
+    container_name: orderservice
+    build: .
+    command: sh -c "sleep 5 && /app/ordersystem"
+    # todo add traefik labels
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.orderservice.rule=Host(`orders.localhost`)"
+      - "traefik.http.routers.orderservice.entrypoints=web"
+      - "traefik.http.services.orderservice.loadbalancer.server.port=3000"
+      - "traefik.docker.network=web"
+    environment:
+      - POSTGRES_DB=order
+      - POSTGRES_USER=docker
+      - POSTGRES_PASSWORD=docker
+      - POSTGRES_TCP_PORT=5432
+      - DB_HOST=order-postgres
+    networks:
+      - intercom
+      - web
+
+  sws:
+    image: joseluisq/static-web-server:latest
+    # todo add frontend folder as volume
+    volumes:
+     - "$PWD/frontend:/var/www/html"  
+    
+    # todo setup environment variables to expose port 80 and serve the frontend folder
+    environment:
+      - SWS_ROOT=/var/www/html
+      - SWS_PORT=80
+      
+    # todo add traefik labels
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.sws.rule=Host(`localhost`)"
+      - "traefik.http.routers.sws.entrypoints=web"
+      - "traefik.http.services.sws.loadbalancer.server.port=80"
+      - "traefik.docker.network=web"
+    networks:
+      - web
+
+  order-postgres:
+    image: postgres:latest
+    restart: always
+    networks:
+      - intercom
+    volumes:
+      - order_pg_vol:/var/lib/postgresql
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_DB=order
+      - POSTGRES_USER=docker
+      - POSTGRES_PASSWORD=docker
+      - PGDATA=/var/lib/postgresql/data
+     
+
+
+      
