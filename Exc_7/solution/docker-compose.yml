@@ -1,0 +1,162 @@
+networks:
+  web:
+    name: web
+    driver: overlay
+    attachable: true
+  intercom:
+    name: intercom
+    driver: overlay
+    attachable: true
+
+volumes:
+  order_pg_vol:
+  minio_vol:
+
+secrets:
+  postgres_user:
+    file: docker/postgres_user_secret
+  postgres_password:
+    file: docker/postgres_password_secret
+  s3_user:
+    file: docker/s3_user_secret
+  s3_password:
+    file: docker/s3_password_secret
+
+services:
+  traefik:
+    image: traefik:v3.6.1
+    command:
+      - --api.dashboard=true
+      - --api.insecure=false
+      - --providers.swarm.endpoint=unix:///var/run/docker.sock
+      - --providers.swarm.exposedbydefault=false
+      - --providers.swarm.network=web
+      - --entrypoints.web.address=:80
+      - --log.level=INFO
+    ports:
+      - target: 80
+        published: 80
+        protocol: tcp
+        mode: ingress
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro  # Traefik reads Swarm API
+    networks:
+      - web
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager # Deploy only to the Manager node
+      labels:
+        - traefik.enable=true
+        - traefik.http.routers.dashboard.rule=Host(`localhost`) && PathPrefix(`/dashboard`)
+        - traefik.http.routers.dashboard.entrypoints=web
+        - traefik.http.routers.dashboard.service=api@internal # Expose Traefik dashboard
+
+
+
+  frontend:
+    image: ghcr.io/ddibiasi/sbd-ais-exercise/frontend:1.0
+    networks:
+      - web
+    deploy:
+      #  deploy globally
+      # should be available at http://localhost from every node
+      mode: global
+      labels:
+        - traefik.enable=true
+        - traefik.http.routers.frontend.rule=Host(`localhost`)
+        - traefik.http.routers.frontend.entrypoints=web
+        - traefik.http.services.frontend.loadbalancer.server.port=80
+
+      
+
+
+  orderservice:
+    image: ghcr.io/ddibiasi/sbd-ais-exercise/orderservice:1.0
+    command: [ "/app/ordersystem" ]
+    depends_on:
+      - postgres
+      - minio
+    secrets:
+      #  use secrets
+      # should be available at http://localhost from every node
+      - s3_user
+      - s3_password
+      - postgres_user
+      - postgres_password
+    environment:
+      - POSTGRES_DB=order
+      - PGPORT=5432
+      - DB_HOST=postgres
+      - S3_ENDPOINT=minio:8500
+      #  use secrets
+      - S3_ACCESS_KEY_ID_FILE=/run/secrets/s3_user
+      - S3_SECRET_ACCESS_KEY_FILE=/run/secrets/s3_password
+      - POSTGRES_USER_FILE=/run/secrets/postgres_user
+      - POSTGRES_PASSWORD_FILE=/run/secrets/postgres_password
+    networks:
+      - web
+      - intercom
+    deploy:
+      # deploy global
+      # Should be reachable at http://orders.localhost
+      # always restart container on failure
+      mode: global
+      restart_policy:
+        condition: any
+        delay: 5s
+        window: 120s
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.orderservice.rule=Host(`orders.localhost`)
+      - traefik.http.routers.orderservice.entrypoints=web
+      - traefik.http.services.orderservice.loadbalancer.server.port=3000
+
+
+  postgres:
+    image: postgres:15.5-alpine # i changes this because with latest i am getting error multiple time 
+    volumes:
+      - order_pg_vol:/var/lib/postgresql/data
+    networks:
+      - intercom
+    secrets:
+      #  use secrets
+      - postgres_user
+      - postgres_password
+    environment:
+      - POSTGRES_DB=order
+      - PGPORT=5432 # changed port for the same error reason
+      #  use secrets
+      - POSTGRES_USER_FILE=/run/secrets/postgres_user
+      - POSTGRES_PASSWORD_FILE=/run/secrets/postgres_password
+    deploy:
+      # replicate only to one worker node
+      # use constraints
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager # Binds the manager means only in my machine
+
+  minio:
+    image: minio/minio:latest
+    command: [ "server", "--address", ":8500", "/data" ]
+    volumes:
+      - minio_vol:/data
+    secrets:
+      #  use secrets
+      - s3_user
+      - s3_password
+    environment:
+      #  use secrets
+      - MINIO_ROOT_USER_FILE=/run/secrets/s3_user
+      - MINIO_ROOT_PASSWORD_FILE=/run/secrets/s3_password
+    networks:
+      - intercom
+    deploy:
+      #  replicate only to one worker node
+      #  use constraints
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
