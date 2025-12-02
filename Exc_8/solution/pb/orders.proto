@@ -1,0 +1,50 @@
+syntax = "proto3";
+
+import "google/protobuf/wrappers.proto";
+import "google/protobuf/empty.proto";
+
+option go_package = "exc8/pb";
+
+package models;
+
+// Messages
+message Drink {
+    int32 id = 1;
+    string name = 2;
+    float price = 3;
+    string description = 4;
+}
+message Drinks {
+    repeated Drink drinks = 1;
+}
+
+message Order {
+    Drink drink = 1;
+}
+
+message Orders {
+    repeated Order orders = 1;
+}
+
+// todo implement messages
+//
+// message MyMessage {
+//  ....
+// }
+
+
+// Generate go files with:
+// Execute `generate_pb.sh`
+
+// Define the service
+service OrderService {
+  // Returns a list of available drinks
+    rpc GetDrinks (google.protobuf.Empty) returns (Drinks);
+    
+    // Places an order for a specific drink
+    rpc OrderDrink (Drink) returns (google.protobuf.Empty);
+    
+    // Returns a list of all orders made so far
+    rpc GetOrders (google.protobuf.Empty) returns (Orders);
+}
+
