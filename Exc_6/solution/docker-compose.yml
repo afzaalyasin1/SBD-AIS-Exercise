@@ -71,7 +71,7 @@ services:
       - web
 
   order-postgres:
-    image: postgres:16
+    image: postgres:18
     volumes:
       - order_pg_vol:/var/lib/postgresql/data
     restart: always
